@@ -1,21 +1,23 @@
 # Contador de Pessoas - Auditório (protótipo PWA)
 
 Protótipo funcional de um PWA (Progressive Web App) que usa IA de visão computacional
-para detectar e contar pessoas em tempo real, usando a câmera do dispositivo — tudo
+para detectar e contar pessoas em tempo real com **Ultralytics YOLO11n**, usando a câmera do dispositivo — tudo
 rodando **dentro do navegador**, sem enviar vídeo para nenhum servidor.
 
 ## Como funciona
 
 - A câmera captura o vídeo ao vivo (`getUserMedia`).
-- O modelo **coco-ssd** (TensorFlow.js), carregado via CDN, roda no navegador e detecta
-  objetos a cada ~300ms, filtrando apenas a classe `person`.
+- O modelo **Ultralytics YOLO11n**, exportado para ONNX, roda no navegador com ONNX
+  Runtime Web e filtra somente a classe `person`.
+- A câmera e a inferência só começam ao pressionar **Iniciar**. **Parar** encerra a
+  inferência e libera imediatamente a câmera do aparelho.
 - Cada pessoa detectada é desenhada como um retângulo sobre o vídeo, e o total é mostrado
   em destaque, junto com o percentual de ocupação (se você definir a capacidade do
   auditório) e um mini-histórico das últimas leituras.
 - Um Service Worker (`sw.js`) faz cache dos arquivos e das bibliotecas de IA, permitindo
   instalar o app na tela inicial e reabrir mesmo com conexão instável.
-- Você pode trocar o **modelo de IA** (rápido x preciso) e ajustar a **sensibilidade**
-  de detecção direto na tela, e baixar um **relatório em CSV** com o histórico de
+- Você pode ajustar a **sensibilidade** de detecção direto na tela e baixar um
+  **relatório em CSV** com o histórico de
   contagens e os eventos de ocupação (70%, 90%, 100%).
 
 ## Como rodar localmente
@@ -41,7 +43,7 @@ npx serve auditorio-pwa
 ```
 
 Na primeira vez, o navegador vai pedir permissão de câmera — aceite. O carregamento do
-modelo de IA pode levar alguns segundos (ele é baixado da CDN na primeira execução e
+modelo de IA pode levar alguns segundos (ele é baixado pelo PWA na primeira execução e
 depois fica em cache).
 
 ## Instalando como app
@@ -58,24 +60,18 @@ como está. Aí qualquer celular ou tablet consegue abrir o link e instalar o ap
 
 ## Por que a contagem falha ou "pisca" entre valores (ex.: 2 e 0)?
 
-O modelo padrão do protótipo (`coco-ssd`) foi treinado majoritariamente com pessoas de
-corpo inteiro, bem visíveis e de frente para a câmera. Em cenas de escritório/auditório
-reais, várias coisas derrubam a confiança da detecção: pessoas sentadas, parcialmente
+Mesmo com YOLO, em cenas de escritório/auditório reais, várias coisas derrubam a
+confiança da detecção: pessoas sentadas, parcialmente
 atrás de monitores/mesas/cadeiras, vistas de lado ou de trás, pouca luz, ou câmera muito
 próxima da cena. Quando a confiança de uma pessoa fica na borda do limiar, ela some e
 aparece de novo a cada leitura — é isso que causa o "piscar" entre 2 e 0 nas suas fotos.
 
 Este protótipo já foi ajustado para atacar isso:
 
-- **Varredura multiescala**: além do quadro completo, o app analisa alternadamente quatro
-  regiões ampliadas da imagem. Isso preserva mais detalhes das pessoas distantes, elimina
-  caixas duplicadas e mantém por poucos segundos as detecções recentes de cada região.
-
-- **Modelo "Preciso" (`mobilenet_v2`)** agora é o padrão — mais lento, porém mais
-  assertivo que o modelo leve original. Se o celular travar/engasgar, troque para
-  "Rápido" no seletor.
+- **YOLO11n a 640×640** substitui o COCO-SSD e preserva mais detalhes de pessoas pequenas,
+  sentadas ou parcialmente ocultas, mantendo o processamento viável em celulares.
 - **Sensibilidade ajustável**: o controle deslizante define o limiar de confiança
-  mínimo (padrão 0.40, mais permissivo que o 0.5 original). Baixe para 0.25–0.30 se
+  mínimo (padrão 0.25). Baixe para 0.15–0.20 se
   ainda estiver perdendo gente; suba se estiver contando coisas erradas como pessoa.
 - **Suavização temporal**: o número exibido agora é a média das últimas 3 leituras
   (~1s), então uma falha pontual em um único frame não derruba o contador para 0.
@@ -105,15 +101,15 @@ antiga, o navegador pode continuar servindo os arquivos velhos. Depois de subir 
 nova versão, force uma atualização: feche todas as abas do app, reabra e dê um
 "recarregar forçado" (no Chrome Android: menu ⋮ → configurações do site → limpar
 dados do site; no desktop: Ctrl/Cmd+Shift+R). O `sw.js` desta versão já foi marcado
-com uma nova versão de cache (`v2`) para ajudar nessa troca.
+com uma nova versão de cache (`v4-yolo`) para ajudar nessa troca.
 
 ## Outras limitações deste protótipo
 
 - **Cobertura do ambiente**: uma única câmera de celular dificilmente cobre um
   auditório inteiro. Em uso real, vale uma câmera fixa grande-angular no fundo da sala,
   ou múltiplas câmeras com contagem combinada.
-- **Desempenho em celulares antigos**: se travar, use o modelo "Rápido" ou aumente o
-  `DETECTION_INTERVAL_MS` em `app.js` para detectar com menos frequência.
+- **Desempenho em celulares antigos**: se travar, aumente o `DETECTION_INTERVAL_MS` em
+  `app.js` para detectar com menos frequência.
 - **Privacidade**: o protótipo não faz reconhecimento facial nem identifica pessoas —
   apenas conta. Nenhum frame de vídeo sai do dispositivo.
 

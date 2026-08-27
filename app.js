@@ -1,5 +1,5 @@
 /* Contador de Pessoas - Auditório
- * Detecção de pessoas 100% no navegador usando TensorFlow.js + modelo coco-ssd.
+ * Detecção de pessoas 100% no navegador usando Ultralytics YOLO11n + ONNX Runtime Web.
  * Nenhum vídeo/frame é enviado para servidor algum.
  */
 
@@ -20,10 +20,11 @@ const sensitivityValueEl = document.getElementById("sensitivityValue");
 const eventsListEl = document.getElementById("eventsList");
 const exportBtn = document.getElementById("exportBtn");
 const clearReportBtn = document.getElementById("clearReportBtn");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
 
-const DETECTION_INTERVAL_MS = 250; // pausa entre inferências
-const TILE_OVERLAP = 0.18;
-const TILE_TTL_MS = 3000;
+const DETECTION_INTERVAL_MS = 150;
+const MODEL_SIZE = 640;
 const NMS_IOU_THRESHOLD = 0.45;
 const MAX_HISTORY_POINTS = 40;
 const SMOOTHING_WINDOW = 3; // nº de leituras usadas para suavizar o contador exibido
@@ -41,10 +42,10 @@ let lastTier = 0; // último limiar de ocupação já disparado (0, 70, 90, 100)
 let deferredInstallPrompt = null;
 let SCORE_THRESHOLD = parseFloat(sensitivitySlider.value);
 let detectionGeneration = 0;
-let tileIndex = 0;
-let tileCache = new Map();
-const tileCanvas = document.createElement("canvas");
-const tileCtx = tileCanvas.getContext("2d", { willReadFrequently: true });
+const inferenceCanvas = document.createElement("canvas");
+inferenceCanvas.width = MODEL_SIZE;
+inferenceCanvas.height = MODEL_SIZE;
+const inferenceCtx = inferenceCanvas.getContext("2d", { willReadFrequently: true });
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -56,9 +57,14 @@ function nowLabel() {
 
 async function loadModel() {
   running = false;
-  setStatus("Carregando modelo de IA (primeira vez pode demorar alguns segundos)...");
-  model = await cocoSsd.load({ base: modelSelect.value });
-  setStatus("Modelo carregado.");
+  setStatus("Carregando Ultralytics YOLO (a primeira vez pode demorar)...");
+  ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
+  ort.env.wasm.simd = true;
+  model = await ort.InferenceSession.create("./yolo11n.onnx", {
+    executionProviders: ["wasm"],
+    graphOptimizationLevel: "all",
+  });
+  setStatus("YOLO carregado. Pressione Iniciar.");
 }
 
 async function startCamera() {
@@ -155,44 +161,62 @@ function removeDuplicatePeople(predictions) {
   return kept;
 }
 
-function getScanRegions() {
-  const w = video.videoWidth;
-  const h = video.videoHeight;
-  const regionW = w * (0.5 + TILE_OVERLAP / 2);
-  const regionH = h * (0.5 + TILE_OVERLAP / 2);
-  return [
-    { x: 0, y: 0, w: regionW, h: regionH },
-    { x: w - regionW, y: 0, w: regionW, h: regionH },
-    { x: 0, y: h - regionH, w: regionW, h: regionH },
-    { x: w - regionW, y: h - regionH, w: regionW, h: regionH },
-  ];
+function prepareYoloInput() {
+  const sourceW = video.videoWidth;
+  const sourceH = video.videoHeight;
+  const scale = Math.min(MODEL_SIZE / sourceW, MODEL_SIZE / sourceH);
+  const drawW = Math.round(sourceW * scale);
+  const drawH = Math.round(sourceH * scale);
+  const padX = Math.floor((MODEL_SIZE - drawW) / 2);
+  const padY = Math.floor((MODEL_SIZE - drawH) / 2);
+
+  inferenceCtx.fillStyle = "#727272";
+  inferenceCtx.fillRect(0, 0, MODEL_SIZE, MODEL_SIZE);
+  inferenceCtx.drawImage(video, 0, 0, sourceW, sourceH, padX, padY, drawW, drawH);
+
+  const rgba = inferenceCtx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
+  const plane = MODEL_SIZE * MODEL_SIZE;
+  const input = new Float32Array(plane * 3);
+  for (let i = 0; i < plane; i++) {
+    input[i] = rgba[i * 4] / 255;
+    input[plane + i] = rgba[i * 4 + 1] / 255;
+    input[plane * 2 + i] = rgba[i * 4 + 2] / 255;
+  }
+  return { tensor: new ort.Tensor("float32", input, [1, 3, MODEL_SIZE, MODEL_SIZE]), scale, padX, padY };
 }
 
-async function detectPeopleMultiScale() {
-  const fullFrame = await model.detect(video, 50, SCORE_THRESHOLD);
-  const regions = getScanRegions();
-  const currentTile = tileIndex % regions.length;
-  const region = regions[currentTile];
-  tileIndex++;
+async function detectPeopleYolo() {
+  const prepared = prepareYoloInput();
+  const inputName = model.inputNames[0];
+  const outputMap = await model.run({ [inputName]: prepared.tensor });
+  const output = outputMap[model.outputNames[0]];
+  const candidates = output.dims[2];
+  const data = output.data;
+  const predictions = [];
 
-  tileCanvas.width = Math.round(region.w);
-  tileCanvas.height = Math.round(region.h);
-  tileCtx.drawImage(video, region.x, region.y, region.w, region.h, 0, 0, tileCanvas.width, tileCanvas.height);
-
-  const tilePredictions = await model.detect(tileCanvas, 50, SCORE_THRESHOLD);
-  const mapped = tilePredictions.map((p) => ({
-    ...p,
-    bbox: [p.bbox[0] + region.x, p.bbox[1] + region.y, p.bbox[2], p.bbox[3]],
-  }));
-  tileCache.set(currentTile, { timestamp: performance.now(), predictions: mapped });
-
-  const now = performance.now();
-  const recentTiles = [];
-  tileCache.forEach((entry, key) => {
-    if (now - entry.timestamp <= TILE_TTL_MS) recentTiles.push(...entry.predictions);
-    else tileCache.delete(key);
-  });
-  return removeDuplicatePeople([...fullFrame, ...recentTiles]);
+  // YOLO11: [cx, cy, largura, altura, 80 probabilidades] x 8400.
+  // A classe 0 do COCO é "person"; as demais classes nem são processadas.
+  for (let i = 0; i < candidates; i++) {
+    const score = data[4 * candidates + i];
+    if (score < SCORE_THRESHOLD) continue;
+    const cx = data[i];
+    const cy = data[candidates + i];
+    const w = data[2 * candidates + i];
+    const h = data[3 * candidates + i];
+    const x = (cx - w / 2 - prepared.padX) / prepared.scale;
+    const y = (cy - h / 2 - prepared.padY) / prepared.scale;
+    predictions.push({
+      class: "person",
+      score,
+      bbox: [
+        Math.max(0, x),
+        Math.max(0, y),
+        Math.min(video.videoWidth - Math.max(0, x), w / prepared.scale),
+        Math.min(video.videoHeight - Math.max(0, y), h / prepared.scale),
+      ],
+    });
+  }
+  return removeDuplicatePeople(predictions).slice(0, 100);
 }
 
 // suaviza o número exibido usando a média das últimas leituras — evita que o
@@ -303,7 +327,7 @@ async function detectLoop(generation) {
 
   try {
     if (video.readyState >= video.HAVE_ENOUGH_DATA) {
-      const predictions = await detectPeopleMultiScale();
+      const predictions = await detectPeopleYolo();
       if (!running || generation !== detectionGeneration) return;
       const count = drawDetections(predictions);
       updateCountUI(count);
@@ -316,8 +340,6 @@ async function detectLoop(generation) {
 }
 
 function startDetectionLoop() {
-  tileCache.clear();
-  tileIndex = 0;
   rawBuffer = [];
   running = true;
   detectionGeneration++;
@@ -327,15 +349,49 @@ function startDetectionLoop() {
 async function init() {
   try {
     await loadModel();
-    await startCamera();
-    startDetectionLoop();
-    setStatus("Detectando pessoas em tempo real...");
+    startBtn.disabled = false;
   } catch (err) {
+    setStatus("Falha ao carregar o YOLO: " + err.message);
     console.error(err);
   }
 }
 
+async function startDetection() {
+  if (!model || running) return;
+  startBtn.disabled = true;
+  setStatus("Iniciando câmera...");
+  try {
+    await startCamera();
+    startDetectionLoop();
+    stopBtn.disabled = false;
+    switchBtn.disabled = false;
+    setStatus("Detectando pessoas com Ultralytics YOLO...");
+  } catch (err) {
+    startBtn.disabled = false;
+  }
+}
+
+function stopDetection() {
+  running = false;
+  detectionGeneration++;
+  if (currentStream) currentStream.getTracks().forEach((track) => track.stop());
+  currentStream = null;
+  video.srcObject = null;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  rawBuffer = [];
+  countEl.textContent = "0";
+  occupancyEl.textContent = "";
+  startBtn.disabled = false;
+  stopBtn.disabled = true;
+  switchBtn.disabled = true;
+  setStatus("Detecção parada. A câmera foi desligada.");
+}
+
+startBtn.addEventListener("click", startDetection);
+stopBtn.addEventListener("click", stopDetection);
+
 switchBtn.addEventListener("click", async () => {
+  if (!running) return;
   running = false;
   detectionGeneration++;
   facingMode = facingMode === "environment" ? "user" : "environment";
@@ -346,18 +402,6 @@ switchBtn.addEventListener("click", async () => {
     setStatus("Detectando pessoas em tempo real...");
   } catch (err) {
     // mensagem de erro já definida em startCamera
-  }
-});
-
-modelSelect.addEventListener("change", async () => {
-  setStatus("Trocando modelo de IA...");
-  rawBuffer = [];
-  try {
-    await loadModel();
-    startDetectionLoop();
-    setStatus("Detectando pessoas em tempo real...");
-  } catch (err) {
-    console.error(err);
   }
 });
 

@@ -16,7 +16,7 @@
     <header>
       <div>
         <h1>Contador de Pessoas</h1>
-        <p>IA rodando no navegador (TensorFlow.js)</p>
+        <p>Ultralytics YOLO rodando no navegador</p>
       </div>
       <button id="installBtn">Instalar app</button>
     </header>
@@ -26,6 +26,11 @@
       <canvas id="overlay" class="overlay"></canvas>
     </div>
     <div class="status-bar" id="status">Iniciando...</div>
+
+    <div class="detection-actions">
+      <button id="startBtn" class="start-button" disabled>Iniciar</button>
+      <button id="stopBtn" class="stop-button" disabled>Parar</button>
+    </div>
 
     <div class="count-card">
       <div class="count-number" id="count">0</div>
@@ -38,20 +43,19 @@
         Capacidade do auditório
         <input type="number" id="capacity" min="0" step="1" value="100" />
       </label>
-      <button class="secondary" id="switchCamera">Trocar câmera</button>
+      <button class="secondary" id="switchCamera" disabled>Trocar câmera</button>
     </div>
 
     <div class="controls">
       <label>
         Modelo de IA
-        <select id="modelSelect">
-          <option value="lite_mobilenet_v2">Rápido (menos preciso)</option>
-          <option value="mobilenet_v2" selected>Preciso (mais lento)</option>
+        <select id="modelSelect" disabled>
+          <option value="yolo11n" selected>Ultralytics YOLO11n</option>
         </select>
       </label>
       <label>
-        Sensibilidade (<span id="sensitivityValue">0.40</span>)
-        <input type="range" id="sensitivity" min="0.15" max="0.8" step="0.05" value="0.4" />
+        Sensibilidade (<span id="sensitivityValue">0.25</span>)
+        <input type="range" id="sensitivity" min="0.10" max="0.8" step="0.05" value="0.25" />
       </label>
     </div>
 
@@ -72,15 +76,14 @@
     </div>
 
     <p class="note">
-      Protótipo de demonstração: a contagem é feita localmente no seu dispositivo, por detecção de objetos
+      A contagem é feita localmente no seu dispositivo com Ultralytics YOLO11n, por detecção de objetos
       (classe "pessoa"), sem reconhecimento facial e sem enviar vídeo para nenhum servidor. Em cenas muito
-      cheias, com pessoas sobrepostas ou parcialmente atrás de mesas/monitores, a precisão cai — use o modelo
-      "Preciso", ajuste a sensibilidade e veja o README para mais dicas e caminhos de evolução.
+      cheias, com pessoas sobrepostas ou parcialmente atrás de mesas/monitores, a precisão pode cair — ajuste
+      a sensibilidade e veja o README para mais dicas e caminhos de evolução.
     </p>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

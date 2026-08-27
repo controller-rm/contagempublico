@@ -167,6 +167,27 @@ button.secondary {
 
 button.secondary:hover { border-color: var(--accent); }
 
+.detection-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.detection-actions button {
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.start-button { background: var(--ok); }
+.stop-button { background: var(--danger); }
+.detection-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .history-card {
   margin-top: 16px;
   background: var(--panel);

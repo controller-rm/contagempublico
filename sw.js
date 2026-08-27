@@ -1,4 +1,4 @@
-const CACHE_NAME = "auditorio-pwa-v3";
+const CACHE_NAME = "auditorio-pwa-v4-yolo";
 
 const CORE_ASSETS = [
   "./",
@@ -8,8 +8,8 @@ const CORE_ASSETS = [
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
-  "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js",
-  "https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js",
+  "./yolo11n.onnx",
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js",
 ];
 
 self.addEventListener("install", (event) => {
