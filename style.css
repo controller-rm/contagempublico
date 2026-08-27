@@ -140,13 +140,19 @@ canvas.overlay {
   min-width: 140px;
 }
 
-.controls input[type="number"] {
+.controls input[type="number"],
+.controls select {
   background: var(--panel);
   border: 1px solid var(--border);
   color: var(--text);
   padding: 8px 10px;
   border-radius: 8px;
   font-size: 0.95rem;
+}
+
+.controls input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
 }
 
 button.secondary {
@@ -182,6 +188,62 @@ button.secondary:hover { border-color: var(--accent); }
   width: 100%;
   height: 80px;
   display: block;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.report-header h2 {
+  margin: 0;
+}
+
+.report-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.report-actions button {
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
+.events-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.events-list li.event {
+  font-size: 0.82rem;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.08);
+  border-left: 3px solid var(--border);
+}
+
+.events-list li.event-warn { border-left-color: var(--warn); }
+.events-list li.event-danger { border-left-color: var(--danger); }
+
+.event-time {
+  color: var(--muted);
+  margin-right: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-empty {
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .note {

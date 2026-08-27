@@ -14,6 +14,9 @@ rodando **dentro do navegador**, sem enviar vídeo para nenhum servidor.
   auditório) e um mini-histórico das últimas leituras.
 - Um Service Worker (`sw.js`) faz cache dos arquivos e das bibliotecas de IA, permitindo
   instalar o app na tela inicial e reabrir mesmo com conexão instável.
+- Você pode trocar o **modelo de IA** (rápido x preciso) e ajustar a **sensibilidade**
+  de detecção direto na tela, e baixar um **relatório em CSV** com o histórico de
+  contagens e os eventos de ocupação (70%, 90%, 100%).
 
 ## Como rodar localmente
 
@@ -53,21 +56,62 @@ Para usar em um auditório real, valeria publicar em algum serviço com HTTPS gr
 por exemplo GitHub Pages, Netlify ou Vercel — basta subir a pasta `auditorio-pwa/`
 como está. Aí qualquer celular ou tablet consegue abrir o link e instalar o app.
 
-## Limitações deste protótipo (e como evoluir)
+## Por que a contagem falha ou "pisca" entre valores (ex.: 2 e 0)?
 
-- **Multidões densas**: detecção por objeto (coco-ssd) perde precisão quando há muita
-  sobreposição de pessoas. Para salas muito cheias, o caminho é um modelo de *crowd
-  counting* por estimativa de densidade (ex.: CSRNet) rodando em um backend.
+O modelo padrão do protótipo (`coco-ssd`) foi treinado majoritariamente com pessoas de
+corpo inteiro, bem visíveis e de frente para a câmera. Em cenas de escritório/auditório
+reais, várias coisas derrubam a confiança da detecção: pessoas sentadas, parcialmente
+atrás de monitores/mesas/cadeiras, vistas de lado ou de trás, pouca luz, ou câmera muito
+próxima da cena. Quando a confiança de uma pessoa fica na borda do limiar, ela some e
+aparece de novo a cada leitura — é isso que causa o "piscar" entre 2 e 0 nas suas fotos.
+
+Este protótipo já foi ajustado para atacar isso:
+
+- **Modelo "Preciso" (`mobilenet_v2`)** agora é o padrão — mais lento, porém mais
+  assertivo que o modelo leve original. Se o celular travar/engasgar, troque para
+  "Rápido" no seletor.
+- **Sensibilidade ajustável**: o controle deslizante define o limiar de confiança
+  mínimo (padrão 0.40, mais permissivo que o 0.5 original). Baixe para 0.25–0.30 se
+  ainda estiver perdendo gente; suba se estiver contando coisas erradas como pessoa.
+- **Suavização temporal**: o número exibido agora é a média das últimas 3 leituras
+  (~1s), então uma falha pontual em um único frame não derruba o contador para 0.
+
+Mesmo assim, para um cenário de auditório real, o ganho de precisão mais importante
+costuma vir do **posicionamento da câmera**: colocá-la mais alta e angulada para baixo,
+enxergando o corpo/tronco das pessoas (não só a cabeça atrás de um monitor), melhora
+muito a taxa de acerto. Em salas muito cheias e com bastante sobreposição, o teto de
+precisão de qualquer detector de objetos (não só este) é limitado — o próximo passo
+seria um modelo de *crowd counting* por estimativa de densidade (ex.: CSRNet) rodando
+em um backend, treinado especificamente para multidões dessas.
+
+## Relatório de ocupação
+
+A cada leitura, o app guarda um registro (horário, contagem, % de ocupação) na memória
+do navegador. Sempre que a ocupação cruza 70%, 90% ou 100% da capacidade definida, um
+evento aparece na lista "Relatório" na tela. O botão **Baixar CSV** exporta todo esse
+histórico da sessão atual em um arquivo `.csv` (colunas: `data_hora`, `pessoas`,
+`ocupacao_pct`), pronto para abrir no Excel/Sheets. O botão **Limpar** zera o registro
+para começar uma nova sessão. Como é tudo local (sem servidor), feche a aba só depois de
+baixar o CSV, senão o histórico se perde.
+
+## Atualizando uma instalação já publicada (GitHub Pages, Netlify, etc.)
+
+Como o app usa Service Worker para cache, se você já tinha instalado/aberto a versão
+antiga, o navegador pode continuar servindo os arquivos velhos. Depois de subir esta
+nova versão, force uma atualização: feche todas as abas do app, reabra e dê um
+"recarregar forçado" (no Chrome Android: menu ⋮ → configurações do site → limpar
+dados do site; no desktop: Ctrl/Cmd+Shift+R). O `sw.js` desta versão já foi marcado
+com uma nova versão de cache (`v2`) para ajudar nessa troca.
+
+## Outras limitações deste protótipo
+
 - **Cobertura do ambiente**: uma única câmera de celular dificilmente cobre um
   auditório inteiro. Em uso real, vale uma câmera fixa grande-angular no fundo da sala,
   ou múltiplas câmeras com contagem combinada.
-- **Desempenho em celulares antigos**: o modelo `lite_mobilenet_v2` foi escolhido por
-  ser leve; em aparelhos muito fracos, aumente o `DETECTION_INTERVAL_MS` em `app.js`
-  para detectar com menos frequência.
+- **Desempenho em celulares antigos**: se travar, use o modelo "Rápido" ou aumente o
+  `DETECTION_INTERVAL_MS` em `app.js` para detectar com menos frequência.
 - **Privacidade**: o protótipo não faz reconhecimento facial nem identifica pessoas —
   apenas conta. Nenhum frame de vídeo sai do dispositivo.
-- **Precisão**: ajuste `SCORE_THRESHOLD` em `app.js` (padrão 0.5) para equilibrar
-  falsos positivos e falsos negativos conforme a iluminação do ambiente.
 
 ## Estrutura de arquivos
 

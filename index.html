@@ -41,15 +41,41 @@
       <button class="secondary" id="switchCamera">Trocar câmera</button>
     </div>
 
+    <div class="controls">
+      <label>
+        Modelo de IA
+        <select id="modelSelect">
+          <option value="lite_mobilenet_v2">Rápido (menos preciso)</option>
+          <option value="mobilenet_v2" selected>Preciso (mais lento)</option>
+        </select>
+      </label>
+      <label>
+        Sensibilidade (<span id="sensitivityValue">0.40</span>)
+        <input type="range" id="sensitivity" min="0.2" max="0.8" step="0.05" value="0.4" />
+      </label>
+    </div>
+
     <div class="history-card">
       <h2>Histórico (últimas leituras)</h2>
       <canvas id="history"></canvas>
     </div>
 
+    <div class="history-card">
+      <div class="report-header">
+        <h2>Relatório</h2>
+        <div class="report-actions">
+          <button class="secondary" id="exportBtn">Baixar CSV</button>
+          <button class="secondary" id="clearReportBtn">Limpar</button>
+        </div>
+      </div>
+      <ul id="eventsList" class="events-list"></ul>
+    </div>
+
     <p class="note">
       Protótipo de demonstração: a contagem é feita localmente no seu dispositivo, por detecção de objetos
       (classe "pessoa"), sem reconhecimento facial e sem enviar vídeo para nenhum servidor. Em cenas muito
-      cheias ou com pessoas sobrepostas, a precisão cai — veja o README para caminhos de evolução.
+      cheias, com pessoas sobrepostas ou parcialmente atrás de mesas/monitores, a precisão cai — use o modelo
+      "Preciso", ajuste a sensibilidade e veja o README para mais dicas e caminhos de evolução.
     </p>
   </div>
 
