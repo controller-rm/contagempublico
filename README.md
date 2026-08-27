@@ -73,8 +73,8 @@ Este protótipo já foi ajustado para atacar isso:
 - **Sensibilidade ajustável**: o controle deslizante define o limiar de confiança
   mínimo (padrão 0.25). Baixe para 0.15–0.20 se
   ainda estiver perdendo gente; suba se estiver contando coisas erradas como pessoa.
-- **Suavização temporal**: o número exibido agora é a média das últimas 3 leituras
-  (~1s), então uma falha pontual em um único frame não derruba o contador para 0.
+- **Contagem sincronizada**: o número exibido corresponde exatamente às caixas YOLO
+  desenhadas no quadro atual, sem atraso causado por médias de leituras anteriores.
 
 Mesmo assim, para um cenário de auditório real, o ganho de precisão mais importante
 costuma vir do **posicionamento da câmera**: colocá-la mais alta e angulada para baixo,
@@ -101,7 +101,7 @@ antiga, o navegador pode continuar servindo os arquivos velhos. Depois de subir 
 nova versão, force uma atualização: feche todas as abas do app, reabra e dê um
 "recarregar forçado" (no Chrome Android: menu ⋮ → configurações do site → limpar
 dados do site; no desktop: Ctrl/Cmd+Shift+R). O `sw.js` desta versão já foi marcado
-com uma nova versão de cache (`v4-yolo`) para ajudar nessa troca.
+com uma nova versão de cache (`v5-count-sync`) para ajudar nessa troca.
 
 ## Outras limitações deste protótipo
 

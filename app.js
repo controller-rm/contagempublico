@@ -25,9 +25,8 @@ const stopBtn = document.getElementById("stopBtn");
 
 const DETECTION_INTERVAL_MS = 150;
 const MODEL_SIZE = 640;
-const NMS_IOU_THRESHOLD = 0.45;
+const NMS_IOU_THRESHOLD = 0.35;
 const MAX_HISTORY_POINTS = 40;
-const SMOOTHING_WINDOW = 3; // nº de leituras usadas para suavizar o contador exibido
 const MAX_LOG_ROWS = 2000; // limite do registro completo (para exportação)
 
 let model = null;
@@ -35,7 +34,6 @@ let currentStream = null;
 let facingMode = "environment";
 let running = false;
 let history = []; // pontos exibidos no mini-gráfico (contagem suavizada)
-let rawBuffer = []; // últimas leituras brutas, usadas para suavizar
 let fullLog = []; // registro completo p/ exportar em CSV: {time, count, pct}
 let events = []; // eventos de limiar (70% / 90% / 100%) exibidos na tela
 let lastTier = 0; // último limiar de ocupação já disparado (0, 70, 90, 100)
@@ -152,7 +150,7 @@ function removeDuplicatePeople(predictions) {
   people.forEach((candidate) => {
     const isDuplicate = kept.some((existing) => {
       const overlap = boxOverlap(candidate, existing);
-      return overlap.iou > NMS_IOU_THRESHOLD || overlap.containment > 0.7;
+      return overlap.iou > NMS_IOU_THRESHOLD || overlap.containment > 0.6;
     });
     if (!isDuplicate) {
       kept.push(candidate);
@@ -219,15 +217,6 @@ async function detectPeopleYolo() {
   return removeDuplicatePeople(predictions).slice(0, 100);
 }
 
-// suaviza o número exibido usando a média das últimas leituras — evita que o
-// contador "pisque" entre valores muito diferentes de um frame para o outro
-function smoothCount(rawCount) {
-  rawBuffer.push(rawCount);
-  if (rawBuffer.length > SMOOTHING_WINDOW) rawBuffer.shift();
-  const avg = rawBuffer.reduce((a, b) => a + b, 0) / rawBuffer.length;
-  return Math.round(avg);
-}
-
 function logEvent(text, level) {
   events.unshift({ time: nowLabel(), text, level });
   events = events.slice(0, 8);
@@ -266,7 +255,9 @@ function checkOccupancyEvents(count, capacity, pct) {
 }
 
 function updateCountUI(rawCount) {
-  const count = smoothCount(rawCount);
+  // O cartão deve sempre corresponder ao número de caixas desenhadas neste quadro.
+  // Uma média temporal fazia 4 caixas aparecerem como 6 após leituras mais altas.
+  const count = rawCount;
   countEl.textContent = count;
 
   const capacity = parseInt(capacityInput.value, 10) || 0;
@@ -340,7 +331,6 @@ async function detectLoop(generation) {
 }
 
 function startDetectionLoop() {
-  rawBuffer = [];
   running = true;
   detectionGeneration++;
   detectLoop(detectionGeneration);
@@ -378,7 +368,6 @@ function stopDetection() {
   currentStream = null;
   video.srcObject = null;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  rawBuffer = [];
   countEl.textContent = "0";
   occupancyEl.textContent = "";
   startBtn.disabled = false;

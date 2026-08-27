@@ -1,4 +1,4 @@
-const CACHE_NAME = "auditorio-pwa-v4-yolo";
+const CACHE_NAME = "auditorio-pwa-v5-count-sync";
 
 const CORE_ASSETS = [
   "./",
