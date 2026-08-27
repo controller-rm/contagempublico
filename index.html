@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Contador de Pessoas - Auditório</title>
+  <meta name="description" content="PWA que usa IA para contar pessoas em um auditório em tempo real" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Contador de Pessoas</h1>
+        <p>IA rodando no navegador (TensorFlow.js)</p>
+      </div>
+      <button id="installBtn">Instalar app</button>
+    </header>
+
+    <div class="video-wrap">
+      <video id="camera" autoplay playsinline muted></video>
+      <canvas id="overlay" class="overlay"></canvas>
+    </div>
+    <div class="status-bar" id="status">Iniciando...</div>
+
+    <div class="count-card">
+      <div class="count-number" id="count">0</div>
+      <div class="count-label">pessoas detectadas agora</div>
+      <div class="occupancy" id="occupancy"></div>
+    </div>
+
+    <div class="controls">
+      <label>
+        Capacidade do auditório
+        <input type="number" id="capacity" min="0" step="1" value="100" />
+      </label>
+      <button class="secondary" id="switchCamera">Trocar câmera</button>
+    </div>
+
+    <div class="history-card">
+      <h2>Histórico (últimas leituras)</h2>
+      <canvas id="history"></canvas>
+    </div>
+
+    <p class="note">
+      Protótipo de demonstração: a contagem é feita localmente no seu dispositivo, por detecção de objetos
+      (classe "pessoa"), sem reconhecimento facial e sem enviar vídeo para nenhum servidor. Em cenas muito
+      cheias ou com pessoas sobrepostas, a precisão cai — veja o README para caminhos de evolução.
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

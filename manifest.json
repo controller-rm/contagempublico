@@ -1,0 +1,25 @@
+{
+  "name": "Contador de Pessoas - Auditório",
+  "short_name": "ContaPessoas",
+  "description": "PWA que usa IA (visão computacional) para contar pessoas em um auditório em tempo real, direto no navegador.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
