@@ -67,6 +67,10 @@ aparece de novo a cada leitura — é isso que causa o "piscar" entre 2 e 0 nas 
 
 Este protótipo já foi ajustado para atacar isso:
 
+- **Varredura multiescala**: além do quadro completo, o app analisa alternadamente quatro
+  regiões ampliadas da imagem. Isso preserva mais detalhes das pessoas distantes, elimina
+  caixas duplicadas e mantém por poucos segundos as detecções recentes de cada região.
+
 - **Modelo "Preciso" (`mobilenet_v2`)** agora é o padrão — mais lento, porém mais
   assertivo que o modelo leve original. Se o celular travar/engasgar, troque para
   "Rápido" no seletor.

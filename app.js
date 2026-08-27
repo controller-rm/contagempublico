@@ -21,7 +21,10 @@ const eventsListEl = document.getElementById("eventsList");
 const exportBtn = document.getElementById("exportBtn");
 const clearReportBtn = document.getElementById("clearReportBtn");
 
-const DETECTION_INTERVAL_MS = 300; // throttle p/ não sobrecarregar dispositivos móveis
+const DETECTION_INTERVAL_MS = 250; // pausa entre inferências
+const TILE_OVERLAP = 0.18;
+const TILE_TTL_MS = 3000;
+const NMS_IOU_THRESHOLD = 0.45;
 const MAX_HISTORY_POINTS = 40;
 const SMOOTHING_WINDOW = 3; // nº de leituras usadas para suavizar o contador exibido
 const MAX_LOG_ROWS = 2000; // limite do registro completo (para exportação)
@@ -37,6 +40,11 @@ let events = []; // eventos de limiar (70% / 90% / 100%) exibidos na tela
 let lastTier = 0; // último limiar de ocupação já disparado (0, 70, 90, 100)
 let deferredInstallPrompt = null;
 let SCORE_THRESHOLD = parseFloat(sensitivitySlider.value);
+let detectionGeneration = 0;
+let tileIndex = 0;
+let tileCache = new Map();
+const tileCanvas = document.createElement("canvas");
+const tileCtx = tileCanvas.getContext("2d", { willReadFrequently: true });
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -112,6 +120,79 @@ function drawDetections(predictions) {
   });
 
   return count;
+}
+
+function boxOverlap(a, b) {
+  const [ax, ay, aw, ah] = a.bbox;
+  const [bx, by, bw, bh] = b.bbox;
+  const left = Math.max(ax, bx);
+  const top = Math.max(ay, by);
+  const right = Math.min(ax + aw, bx + bw);
+  const bottom = Math.min(ay + ah, by + bh);
+  const intersection = Math.max(0, right - left) * Math.max(0, bottom - top);
+  const union = aw * ah + bw * bh - intersection;
+  const smallerArea = Math.min(aw * ah, bw * bh);
+  return {
+    iou: union > 0 ? intersection / union : 0,
+    containment: smallerArea > 0 ? intersection / smallerArea : 0,
+  };
+}
+
+function removeDuplicatePeople(predictions) {
+  const people = predictions
+    .filter((p) => p.class === "person" && p.score >= SCORE_THRESHOLD)
+    .sort((a, b) => b.score - a.score);
+  const kept = [];
+  people.forEach((candidate) => {
+    const isDuplicate = kept.some((existing) => {
+      const overlap = boxOverlap(candidate, existing);
+      return overlap.iou > NMS_IOU_THRESHOLD || overlap.containment > 0.7;
+    });
+    if (!isDuplicate) {
+      kept.push(candidate);
+    }
+  });
+  return kept;
+}
+
+function getScanRegions() {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  const regionW = w * (0.5 + TILE_OVERLAP / 2);
+  const regionH = h * (0.5 + TILE_OVERLAP / 2);
+  return [
+    { x: 0, y: 0, w: regionW, h: regionH },
+    { x: w - regionW, y: 0, w: regionW, h: regionH },
+    { x: 0, y: h - regionH, w: regionW, h: regionH },
+    { x: w - regionW, y: h - regionH, w: regionW, h: regionH },
+  ];
+}
+
+async function detectPeopleMultiScale() {
+  const fullFrame = await model.detect(video, 50, SCORE_THRESHOLD);
+  const regions = getScanRegions();
+  const currentTile = tileIndex % regions.length;
+  const region = regions[currentTile];
+  tileIndex++;
+
+  tileCanvas.width = Math.round(region.w);
+  tileCanvas.height = Math.round(region.h);
+  tileCtx.drawImage(video, region.x, region.y, region.w, region.h, 0, 0, tileCanvas.width, tileCanvas.height);
+
+  const tilePredictions = await model.detect(tileCanvas, 50, SCORE_THRESHOLD);
+  const mapped = tilePredictions.map((p) => ({
+    ...p,
+    bbox: [p.bbox[0] + region.x, p.bbox[1] + region.y, p.bbox[2], p.bbox[3]],
+  }));
+  tileCache.set(currentTile, { timestamp: performance.now(), predictions: mapped });
+
+  const now = performance.now();
+  const recentTiles = [];
+  tileCache.forEach((entry, key) => {
+    if (now - entry.timestamp <= TILE_TTL_MS) recentTiles.push(...entry.predictions);
+    else tileCache.delete(key);
+  });
+  return removeDuplicatePeople([...fullFrame, ...recentTiles]);
 }
 
 // suaviza o número exibido usando a média das últimas leituras — evita que o
@@ -217,12 +298,13 @@ function drawHistory() {
   });
 }
 
-async function detectLoop() {
-  if (!running) return;
+async function detectLoop(generation) {
+  if (!running || generation !== detectionGeneration) return;
 
   try {
     if (video.readyState >= video.HAVE_ENOUGH_DATA) {
-      const predictions = await model.detect(video, 50, SCORE_THRESHOLD);
+      const predictions = await detectPeopleMultiScale();
+      if (!running || generation !== detectionGeneration) return;
       const count = drawDetections(predictions);
       updateCountUI(count);
     }
@@ -230,26 +312,37 @@ async function detectLoop() {
     console.error("Erro na detecção:", err);
   }
 
-  setTimeout(detectLoop, DETECTION_INTERVAL_MS);
+  setTimeout(() => detectLoop(generation), DETECTION_INTERVAL_MS);
+}
+
+function startDetectionLoop() {
+  tileCache.clear();
+  tileIndex = 0;
+  rawBuffer = [];
+  running = true;
+  detectionGeneration++;
+  detectLoop(detectionGeneration);
 }
 
 async function init() {
   try {
     await loadModel();
     await startCamera();
-    running = true;
+    startDetectionLoop();
     setStatus("Detectando pessoas em tempo real...");
-    detectLoop();
   } catch (err) {
     console.error(err);
   }
 }
 
 switchBtn.addEventListener("click", async () => {
+  running = false;
+  detectionGeneration++;
   facingMode = facingMode === "environment" ? "user" : "environment";
   setStatus("Trocando câmera...");
   try {
     await startCamera();
+    startDetectionLoop();
     setStatus("Detectando pessoas em tempo real...");
   } catch (err) {
     // mensagem de erro já definida em startCamera
@@ -261,9 +354,8 @@ modelSelect.addEventListener("change", async () => {
   rawBuffer = [];
   try {
     await loadModel();
-    running = true;
+    startDetectionLoop();
     setStatus("Detectando pessoas em tempo real...");
-    detectLoop();
   } catch (err) {
     console.error(err);
   }
